@@ -9,13 +9,13 @@
 <div class="mb-3 flex {isUser ? 'justify-end' : 'justify-start'}">
   <div class="max-w-xs lg:max-w-md">
     <div 
-      class="rounded-lg px-4 py-2 shadow-lg backdrop-blur-sm {isUser 
-        ? 'bg-blue-600 bg-opacity-90 text-white border border-blue-400 border-opacity-30' 
-        : 'bg-gray-800 bg-opacity-90 text-white border border-gray-600 border-opacity-30'}"
+      class="rounded-xl px-4 py-3 {isUser 
+        ? 'bg-white bg-opacity-90 text-gray-800 border border-gray-200' 
+        : 'bg-gray-100 bg-opacity-80 text-gray-700 border border-gray-300'}"
     >
-      <p class="text-sm font-medium">{message}</p>
+      <p class="text-sm leading-relaxed">{message}</p>
     </div>
-    <p class="mt-1 text-xs text-white bg-black bg-opacity-40 px-2 py-1 rounded {isUser ? 'text-right' : 'text-left'}">
+    <p class="mt-1 text-xs text-gray-400 {isUser ? 'text-right' : 'text-left'}">
       {formattedTime}
     </p>
   </div>

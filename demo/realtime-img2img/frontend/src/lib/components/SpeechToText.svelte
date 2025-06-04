@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from 'svelte';
-  import Button from './Button.svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   
   const dispatch = createEventDispatcher();
   
@@ -9,6 +8,24 @@
   let isSupported: boolean = false;
   let interimTranscript: string = '';
   let finalTranscript: string = '';
+  let shouldListen: boolean = true;
+  let restartTimeout: number;
+  let isPaused: boolean = false;
+  
+  // Export functions to control listening from parent component
+  export function pauseListening() {
+    if (recognition && isListening) {
+      isPaused = true;
+      recognition.stop();
+    }
+  }
+  
+  export function resumeListening() {
+    if (recognition && isPaused) {
+      isPaused = false;
+      recognition.start();
+    }
+  }
   
   onMount(() => {
     // Check if browser supports speech recognition
@@ -24,12 +41,21 @@
         
         recognition.onstart = () => {
           isListening = true;
-          console.log('Speech recognition started');
+          console.log('Speech recognition started - continuously listening');
         };
         
         recognition.onend = () => {
           isListening = false;
           console.log('Speech recognition ended');
+          
+          // Only restart if we should still be listening and not paused
+          if (shouldListen && !isPaused) {
+            restartTimeout = setTimeout(() => {
+              if (shouldListen && recognition && !isPaused) {
+                recognition.start();
+              }
+            }, 100);
+          }
         };
         
         recognition.onresult = (event: any) => {
@@ -60,46 +86,55 @@
         recognition.onerror = (event: any) => {
           console.error('Speech recognition error:', event.error);
           isListening = false;
+          
+          // Restart after error (except if it's a permission error or paused)
+          if (shouldListen && event.error !== 'not-allowed' && !isPaused) {
+            restartTimeout = setTimeout(() => {
+              if (shouldListen && recognition && !isPaused) {
+                recognition.start();
+              }
+            }, 1000);
+          }
         };
+        
+        // Start listening immediately
+        recognition.start();
       }
     }
   });
   
-  function toggleListening() {
-    if (!recognition) return;
-    
-    if (isListening) {
-      recognition.stop();
-    } else {
-      recognition.start();
+  onDestroy(() => {
+    shouldListen = false;
+    if (restartTimeout) {
+      clearTimeout(restartTimeout);
     }
-  }
+    if (recognition && isListening) {
+      recognition.stop();
+    }
+  });
 </script>
 
 {#if isSupported}
   <div class="speech-to-text">
-    <Button 
-      on:click={toggleListening}
-      classList={`transition-colors ${isListening 
-        ? 'bg-red-500 hover:bg-red-600 text-white' 
-        : 'bg-green-500 hover:bg-green-600 text-white'}`}
-    >
-      {#if isListening}
-        <span class="flex items-center gap-2">
-          <div class="h-2 w-2 animate-pulse rounded-full bg-white"></div>
-          Stop Listening
-        </span>
+    <div class="flex items-center gap-2 text-sm text-gray-300">
+      {#if isPaused}
+        <div class="h-2 w-2 rounded-full bg-orange-400"></div>
+        <span>Paused while system speaks...</span>
+      {:else if isListening}
+        <div class="h-2 w-2 animate-pulse rounded-full bg-green-400"></div>
+        <span>Listening...</span>
       {:else}
-        🎤 Start Voice
+        <div class="h-2 w-2 rounded-full bg-gray-400"></div>
+        <span>Voice recognition ready</span>
       {/if}
-    </Button>
+    </div>
     
     {#if interimTranscript || finalTranscript}
-      <div class="mt-2 rounded-lg bg-gray-100 p-3 dark:bg-gray-800">
-        <p class="text-sm text-gray-600 dark:text-gray-400">
-          {interimTranscript}
-          <span class="font-semibold text-gray-900 dark:text-white">
-            {finalTranscript}
+      <div class="mt-2 rounded-lg bg-white bg-opacity-10 p-3 border border-white border-opacity-20">
+        <p class="text-sm text-gray-300">
+          {finalTranscript}
+          <span class="text-gray-400 italic">
+            {interimTranscript}
           </span>
         </p>
       </div>

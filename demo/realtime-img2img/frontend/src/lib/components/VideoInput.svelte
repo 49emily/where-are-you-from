@@ -75,7 +75,16 @@
     
     // Clear canvas and draw video preserving aspect ratio
     ctx.clearRect(0, 0, size.width, size.height);
+    
+    // Save context state and apply horizontal mirroring
+    ctx.save();
+    ctx.scale(-1, 1);
+    ctx.translate(-size.width, 0);
+    
     ctx.drawImage(videoEl, offsetX, offsetY, drawWidth, drawHeight);
+    
+    // Restore context state
+    ctx.restore();
     
     const blob = await new Promise<Blob>((resolve) => {
       canvasEl.toBlob(
@@ -104,6 +113,7 @@
     {/if}
     <video
       class="pointer-events-none w-full h-full object-cover"
+      style="transform: scaleX(-1);"
       bind:this={videoEl}
       on:loadeddata={() => {
         videoIsReady = true;

@@ -60,7 +60,7 @@ class App:
 
         async def handle_websocket_data(user_id: uuid.UUID):
             if not self.conn_manager.check_user(user_id):
-                return HTTPException(status_code=404, detail="User not found")
+                raise HTTPException(status_code=404, detail="User not found")
             last_time = time.time()
             try:
                 while True:
@@ -115,7 +115,7 @@ class App:
                         params = await self.conn_manager.get_latest_data(user_id)
                         if params is None:
                             continue
-                        image = pipeline.predict(params)
+                        image = await pipeline.predict(params)
                         if image is None:
                             continue
                         frame = pil_to_frame(image)

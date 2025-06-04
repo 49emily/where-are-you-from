@@ -12,6 +12,9 @@ sys.path.append(
 from utils.wrapper import StreamDiffusionWrapper
 
 import torch
+import asyncio
+import aiohttp
+import json
 
 from config import Args
 from pydantic import BaseModel, Field
@@ -22,27 +25,80 @@ import math
 base_model = "stabilityai/sd-turbo"
 taesd_model = "madebyollin/taesd"
 
-default_prompt = "Portrait of The Joker halloween costume, face painting, with , glare pose, detailed, intricate, full of colour, cinematic lighting, trending on artstation, 8k, hyperrealistic, focused, extreme details, unreal engine 5 cinematic, masterpiece"
+default_prompt = "vast open sky in vibrant shades of blue, wispy white clouds drifting peacefully, gentle gradients and soft edges, watercolor texture with subtle bleeding and pooling, serene and airy atmosphere, minimal landscape below with hints of trees or rooftops, digital painting, dreamy and atmospheric, high-resolution artstation-style watercolor"
 default_negative_prompt = "black and white, blurry, low resolution, pixelated,  pixel art, low quality, low fidelity"
 
-page_content = """<h1 class="text-3xl font-bold">StreamDiffusion</h1>
-<h3 class="text-xl font-bold">Image-to-Image SD-Turbo</h3>
-<p class="text-sm">
-    This demo showcases
-    <a
-    href="https://github.com/cumulo-autumn/StreamDiffusion"
-    target="_blank"
-    class="text-blue-500 underline hover:no-underline">StreamDiffusion
-</a>
-Image to Image pipeline using
-    <a
-    href="https://huggingface.co/stabilityai/sd-turbo"
-    target="_blank"
-    class="text-blue-500 underline hover:no-underline">SD-Turbo</a
-    > with a MJPEG stream server.
-</p>
-"""
+# page_content = """<h1 class="text-3xl font-bold">StreamDiffusion</h1>
+# <h3 class="text-xl font-bold">Image-to-Image SD-Turbo</h3>
+# <p class="text-sm">
+#     This demo showcases
+#     <a
+#     href="https://github.com/cumulo-autumn/StreamDiffusion"
+#     target="_blank"
+#     class="text-blue-500 underline hover:no-underline">StreamDiffusion
+# </a>
+# Image to Image pipeline using
+#     <a
+#     href="https://huggingface.co/stabilityai/sd-turbo"
+#     target="_blank"
+#     class="text-blue-500 underline hover:no-underline">SD-Turbo</a
+#     > with a MJPEG stream server.
+# </p>
+# """
 
+page_content = ""
+
+# OpenAI API configuration - will be set via environment variable
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+async def enhance_prompt_with_gpt4o(user_prompt: str) -> str:
+    """
+    Enhance user prompt using GPT-4o-mini to create better SDXL prompts
+    """
+    if not OPENAI_API_KEY:
+        print("Warning: No OpenAI API key found, using original prompt")
+        return user_prompt
+    
+    system_prompt = """Given this topic, come up with the best SDXL prompt. Make sure to include these exact words in the prompt: watercolor, abstract, digital art.
+
+Return ONLY the enhanced prompt, nothing else. Make it concise and optimized for SDXL image generation. Do not mention people in the prompt."""
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            headers = {
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            
+            data = {
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "max_tokens": 100,
+                "temperature": 0.7
+            }
+            
+            async with session.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=data,
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    enhanced_prompt = result["choices"][0]["message"]["content"].strip()
+                    print(f"Original prompt: {user_prompt}")
+                    print(f"Enhanced prompt: {enhanced_prompt}")
+                    return enhanced_prompt
+                else:
+                    print(f"OpenAI API error: {response.status}")
+                    return user_prompt
+                    
+    except Exception as e:
+        print(f"Error enhancing prompt: {e}")
+        return user_prompt
 
 class Pipeline:
     class Info(BaseModel):
@@ -96,6 +152,9 @@ class Pipeline:
         )
 
         self.last_prompt = default_prompt
+        self.last_enhanced_prompt = default_prompt
+        self.cached_prompt = ""
+        self.cached_enhanced_prompt = ""
         self.stream.prepare(
             prompt=default_prompt,
             negative_prompt=default_negative_prompt,
@@ -103,12 +162,22 @@ class Pipeline:
             guidance_scale=1.2,
         )
 
-    def predict(self, params: "Pipeline.InputParams") -> Image.Image:
-        # Invert the input image colors
-        # inverted_image = ImageOps.invert(params.image.convert('RGB'))
+    async def predict(self, params: "Pipeline.InputParams") -> Image.Image:
+        current_prompt = params.prompt.strip()
         
-        # image_tensor = self.stream.preprocess_image(inverted_image)
+        # Only enhance prompt if it has changed
+        if current_prompt != self.cached_prompt:
+            print(f"New prompt detected: {current_prompt}")
+            enhanced_prompt = await enhance_prompt_with_gpt4o(current_prompt)
+            self.cached_prompt = current_prompt
+            self.cached_enhanced_prompt = enhanced_prompt
+            print(f"Cached enhanced prompt: {enhanced_prompt}")
+        else:
+            # Use cached enhanced prompt
+            enhanced_prompt = self.cached_enhanced_prompt
+        
+        # Use enhanced prompt for image generation
         image_tensor = self.stream.preprocess_image(params.image)
-        output_image = self.stream(image=image_tensor, prompt=params.prompt)
+        output_image = self.stream(image=image_tensor, prompt=enhanced_prompt)
 
         return output_image

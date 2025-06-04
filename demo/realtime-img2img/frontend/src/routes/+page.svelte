@@ -4,8 +4,6 @@
   import { PipelineMode } from '$lib/types';
   import ImagePlayer from '$lib/components/ImagePlayer.svelte';
   import VideoInput from '$lib/components/VideoInput.svelte';
-  import Button from '$lib/components/Button.svelte';
-  import PipelineOptions from '$lib/components/PipelineOptions.svelte';
   import ChatView from '$lib/components/ChatView.svelte';
   import Spinner from '$lib/icons/spinner.svelte';
   import Warning from '$lib/components/Warning.svelte';
@@ -21,7 +19,6 @@
   let currentQueueSize: number = 0;
   let queueCheckerRunning: boolean = false;
   let warningMessage: string = '';
-  let showControls: boolean = true;
   
   onMount(() => {
     getSettings();
@@ -36,6 +33,9 @@
     pageContent = settings.page_content;
     console.log(pipelineParams);
     toggleQueueChecker(true);
+    
+    // Auto-start the LCM live when page loads
+    await startLcmLive();
   }
 
   // Handle new prompts from chat
@@ -54,6 +54,7 @@
       getQueueSize();
     }
   }
+  
   async function getQueueSize() {
     if (!queueCheckerRunning) {
       return;
@@ -75,34 +76,19 @@
   $: if ($lcmLiveStatus === LCMLiveStatus.TIMEOUT) {
     warningMessage = 'Session timed out. Please try again.';
   }
-  let disabled = false;
-  async function toggleLcmLive() {
+  
+  async function startLcmLive() {
     try {
-      if (!isLCMRunning) {
-        if (isImageMode) {
-          await mediaStreamActions.enumerateDevices();
-          await mediaStreamActions.start();
-        }
-        disabled = true;
-        await lcmLiveActions.start(getSreamdata);
-        disabled = false;
-        toggleQueueChecker(false);
-      } else {
-        if (isImageMode) {
-          mediaStreamActions.stop();
-        }
-        lcmLiveActions.stop();
-        toggleQueueChecker(true);
+      if (isImageMode) {
+        await mediaStreamActions.enumerateDevices();
+        await mediaStreamActions.start();
       }
+      await lcmLiveActions.start(getSreamdata);
+      toggleQueueChecker(false);
     } catch (e) {
       warningMessage = e instanceof Error ? e.message : '';
-      disabled = false;
       toggleQueueChecker(true);
     }
-  }
-
-  function toggleControls() {
-    showControls = !showControls;
   }
 </script>
 
@@ -134,53 +120,8 @@
 
     <!-- Chat Overlay - Centered on page -->
     <div class="chat-overlay-centered">
-      <ChatView on:newPrompt={handleNewPrompt} maxMessages={15} />
+      <ChatView on:newPrompt={handleNewPrompt} />
     </div>
-
-    <!-- Controls Toggle Button -->
-    <button 
-      class="controls-toggle"
-      on:click={toggleControls}
-      title={showControls ? 'Hide Controls' : 'Show Controls'}
-    >
-      {showControls ? '⚙️' : '⚙️'}
-    </button>
-
-    <!-- Controls Panel -->
-    {#if showControls}
-      <div class="controls-panel">
-        <div class="controls-content">
-          {#if pageContent}
-            <div class="text-center mb-4">
-              {@html pageContent}
-            </div>
-          {/if}
-          
-    {#if maxQueueSize > 0}
-            <p class="text-sm text-center mb-4">
-        There are <span id="queue_size" class="font-bold">{currentQueueSize}</span>
-        user(s) sharing the same GPU, affecting real-time performance. Maximum queue size is {maxQueueSize}.
-        <a
-          href="https://huggingface.co/spaces/radames/Real-Time-Latent-Consistency-Model?duplicate=true"
-          target="_blank"
-          class="text-blue-500 underline hover:no-underline">Duplicate</a
-        > and run it on your own GPU.
-      </p>
-    {/if}
-
-          <div class="flex flex-col gap-4">
-            <Button on:click={toggleLcmLive} {disabled} classList={'text-lg p-2 w-full'}>
-          {#if isLCMRunning}
-            Stop
-          {:else}
-            Start
-          {/if}
-        </Button>
-        <PipelineOptions {pipelineParams}></PipelineOptions>
-      </div>
-        </div>
-      </div>
-    {/if}
 
   {:else}
     <!-- loading -->
@@ -231,18 +172,6 @@
     height: 135px; /* 16:9 aspect ratio */
   }
 
-  .controls-toggle {
-    @apply absolute bottom-4 left-4 z-30 bg-black bg-opacity-50 text-white p-3 rounded-full hover:bg-opacity-70 transition-all;
-  }
-
-  .controls-panel {
-    @apply absolute bottom-4 left-16 z-20 bg-black bg-opacity-80 backdrop-blur-sm text-white rounded-lg p-4 max-w-md;
-  }
-
-  .controls-content {
-    @apply space-y-4;
-  }
-
   /* Mobile responsive adjustments */
   @media (max-width: 768px) {
     .chat-overlay-centered :global(.chat-view) {
@@ -254,14 +183,6 @@
       @apply top-2 left-2;
       width: 160px;
       height: 90px; /* 16:9 aspect ratio for mobile */
-    }
-    
-    .controls-panel {
-      @apply bottom-2 left-2 right-2 max-w-none;
-    }
-    
-    .controls-toggle {
-      @apply bottom-2 left-1/2 transform -translate-x-1/2;
     }
   }
 </style>
