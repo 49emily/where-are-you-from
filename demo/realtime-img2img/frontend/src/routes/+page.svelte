@@ -6,11 +6,12 @@
   import VideoInput from '$lib/components/VideoInput.svelte';
   import Button from '$lib/components/Button.svelte';
   import PipelineOptions from '$lib/components/PipelineOptions.svelte';
+  import ChatView from '$lib/components/ChatView.svelte';
   import Spinner from '$lib/icons/spinner.svelte';
   import Warning from '$lib/components/Warning.svelte';
   import { lcmLiveStatus, lcmLiveActions, LCMLiveStatus } from '$lib/lcmLive';
   import { mediaStreamActions, onFrameChangeStore } from '$lib/mediaStream';
-  import { getPipelineValues, deboucedPipelineValues } from '$lib/store';
+  import { getPipelineValues, deboucedPipelineValues, pipelineValues } from '$lib/store';
 
   let pipelineParams: Fields;
   let pipelineInfo: PipelineInfo;
@@ -20,6 +21,8 @@
   let currentQueueSize: number = 0;
   let queueCheckerRunning: boolean = false;
   let warningMessage: string = '';
+  let showControls: boolean = true;
+  
   onMount(() => {
     getSettings();
   });
@@ -34,6 +37,17 @@
     console.log(pipelineParams);
     toggleQueueChecker(true);
   }
+
+  // Handle new prompts from chat
+  function handleNewPrompt(event: CustomEvent) {
+    const { prompt } = event.detail;
+    // Update the pipeline values store with the new prompt
+    pipelineValues.update(values => ({
+      ...values,
+      prompt: prompt
+    }));
+  }
+
   function toggleQueueChecker(start: boolean) {
     queueCheckerRunning = start && maxQueueSize > 0;
     if (start) {
@@ -86,6 +100,10 @@
       toggleQueueChecker(true);
     }
   }
+
+  function toggleControls() {
+    showControls = !showControls;
+  }
 </script>
 
 <svelte:head>
@@ -94,14 +112,52 @@
   ></script>
 </svelte:head>
 
-<main class="container mx-auto flex max-w-5xl flex-col gap-3 px-4 py-4">
+<!-- Fullscreen container -->
+<div class="fullscreen-container">
   <Warning bind:message={warningMessage}></Warning>
-  <article class="text-center">
-    {#if pageContent}
-      {@html pageContent}
+  
+  {#if pipelineParams}
+    <!-- Fullscreen Image Player -->
+    <div class="fullscreen-image">
+      <ImagePlayer />
+    </div>
+
+    <!-- Video Input (small overlay if in image mode) -->
+    {#if isImageMode}
+      <div class="video-input-overlay">
+        <VideoInput
+          width={Number(pipelineParams.width.default)}
+          height={Number(pipelineParams.height.default)}
+        />
+      </div>
     {/if}
+
+    <!-- Chat Overlay - Centered on page -->
+    <div class="chat-overlay-centered">
+      <ChatView on:newPrompt={handleNewPrompt} maxMessages={15} />
+    </div>
+
+    <!-- Controls Toggle Button -->
+    <button 
+      class="controls-toggle"
+      on:click={toggleControls}
+      title={showControls ? 'Hide Controls' : 'Show Controls'}
+    >
+      {showControls ? '⚙️' : '⚙️'}
+    </button>
+
+    <!-- Controls Panel -->
+    {#if showControls}
+      <div class="controls-panel">
+        <div class="controls-content">
+          {#if pageContent}
+            <div class="text-center mb-4">
+              {@html pageContent}
+            </div>
+          {/if}
+          
     {#if maxQueueSize > 0}
-      <p class="text-sm">
+            <p class="text-sm text-center mb-4">
         There are <span id="queue_size" class="font-bold">{currentQueueSize}</span>
         user(s) sharing the same GPU, affecting real-time performance. Maximum queue size is {maxQueueSize}.
         <a
@@ -111,22 +167,9 @@
         > and run it on your own GPU.
       </p>
     {/if}
-  </article>
-  {#if pipelineParams}
-    <article class="my-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {#if isImageMode}
-        <div class="sm:col-start-1">
-          <VideoInput
-            width={Number(pipelineParams.width.default)}
-            height={Number(pipelineParams.height.default)}
-          ></VideoInput>
-        </div>
-      {/if}
-      <div class={isImageMode ? 'sm:col-start-2' : 'col-span-2'}>
-        <ImagePlayer />
-      </div>
-      <div class="sm:col-span-2">
-        <Button on:click={toggleLcmLive} {disabled} classList={'text-lg my-1 p-2'}>
+
+          <div class="flex flex-col gap-4">
+            <Button on:click={toggleLcmLive} {disabled} classList={'text-lg p-2 w-full'}>
           {#if isLCMRunning}
             Stop
           {:else}
@@ -135,18 +178,90 @@
         </Button>
         <PipelineOptions {pipelineParams}></PipelineOptions>
       </div>
-    </article>
+        </div>
+      </div>
+    {/if}
+
   {:else}
     <!-- loading -->
-    <div class="flex items-center justify-center gap-3 py-48 text-2xl">
+    <div class="flex items-center justify-center h-screen text-2xl">
       <Spinner classList={'animate-spin opacity-50'}></Spinner>
       <p>Loading...</p>
     </div>
   {/if}
-</main>
+</div>
 
 <style lang="postcss">
   :global(html) {
     @apply text-black dark:bg-gray-900 dark:text-white;
+  }
+
+  .fullscreen-container {
+    @apply fixed inset-0 w-full h-full bg-black;
+  }
+
+  .fullscreen-image {
+    @apply absolute inset-0 w-full h-full flex items-center justify-center;
+  }
+
+  .fullscreen-image :global(.relative) {
+    @apply !static w-full h-full !max-w-none flex items-center justify-center;
+  }
+
+  .fullscreen-image :global(img) {
+    @apply max-w-full max-h-full object-contain !aspect-auto !rounded-none;
+    width: 100vw;
+    height: 100vh;
+    object-fit: contain;
+  }
+
+  .chat-overlay-centered {
+    @apply absolute inset-0 flex items-center justify-center z-20 pointer-events-none;
+  }
+
+  .chat-overlay-centered :global(.chat-view) {
+    @apply pointer-events-auto;
+    max-width: 600px;
+    width: 90%;
+  }
+
+  .video-input-overlay {
+    @apply absolute top-4 left-4 z-10 rounded-lg overflow-hidden shadow-lg;
+    width: 240px;
+    height: 135px; /* 16:9 aspect ratio */
+  }
+
+  .controls-toggle {
+    @apply absolute bottom-4 left-4 z-30 bg-black bg-opacity-50 text-white p-3 rounded-full hover:bg-opacity-70 transition-all;
+  }
+
+  .controls-panel {
+    @apply absolute bottom-4 left-16 z-20 bg-black bg-opacity-80 backdrop-blur-sm text-white rounded-lg p-4 max-w-md;
+  }
+
+  .controls-content {
+    @apply space-y-4;
+  }
+
+  /* Mobile responsive adjustments */
+  @media (max-width: 768px) {
+    .chat-overlay-centered :global(.chat-view) {
+      max-width: 90%;
+      width: 95%;
+    }
+    
+    .video-input-overlay {
+      @apply top-2 left-2;
+      width: 160px;
+      height: 90px; /* 16:9 aspect ratio for mobile */
+    }
+    
+    .controls-panel {
+      @apply bottom-2 left-2 right-2 max-w-none;
+    }
+    
+    .controls-toggle {
+      @apply bottom-2 left-1/2 transform -translate-x-1/2;
+    }
   }
 </style>

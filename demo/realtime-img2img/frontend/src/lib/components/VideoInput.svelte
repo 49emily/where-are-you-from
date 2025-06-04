@@ -12,7 +12,12 @@
   import MediaListSwitcher from './MediaListSwitcher.svelte';
   export let width = 512;
   export let height = 512;
-  const size = { width, height };
+  
+  // Calculate 16:9 aspect ratio based on the width
+  const aspectRatio = 16 / 9;
+  const canvasWidth = width;
+  const canvasHeight = Math.round(width / aspectRatio);
+  const size = { width: canvasWidth, height: canvasHeight };
 
   let videoEl: HTMLVideoElement;
   let canvasEl: HTMLCanvasElement;
@@ -47,18 +52,31 @@
     }
     const videoWidth = videoEl.videoWidth;
     const videoHeight = videoEl.videoHeight;
-    let height0 = videoHeight;
-    let width0 = videoWidth;
-    let x0 = 0;
-    let y0 = 0;
-    if (videoWidth > videoHeight) {
-      width0 = videoHeight;
-      x0 = (videoWidth - videoHeight) / 2;
+    
+    // Calculate scaling to fit the video into the canvas while preserving aspect ratio
+    const videoAspectRatio = videoWidth / videoHeight;
+    const canvasAspectRatio = size.width / size.height;
+    
+    let drawWidth, drawHeight, offsetX, offsetY;
+    
+    if (videoAspectRatio > canvasAspectRatio) {
+      // Video is wider than canvas - fit by height
+      drawHeight = size.height;
+      drawWidth = drawHeight * videoAspectRatio;
+      offsetX = (size.width - drawWidth) / 2;
+      offsetY = 0;
     } else {
-      height0 = videoWidth;
-      y0 = (videoHeight - videoWidth) / 2;
+      // Video is taller than canvas - fit by width
+      drawWidth = size.width;
+      drawHeight = drawWidth / videoAspectRatio;
+      offsetX = 0;
+      offsetY = (size.height - drawHeight) / 2;
     }
-    ctx.drawImage(videoEl, x0, y0, width0, height0, 0, 0, size.width, size.height);
+    
+    // Clear canvas and draw video preserving aspect ratio
+    ctx.clearRect(0, 0, size.width, size.height);
+    ctx.drawImage(videoEl, offsetX, offsetY, drawWidth, drawHeight);
+    
     const blob = await new Promise<Blob>((resolve) => {
       canvasEl.toBlob(
         (blob) => {
@@ -78,14 +96,14 @@
 </script>
 
 <div class="relative mx-auto max-w-lg overflow-hidden rounded-lg border border-slate-300">
-  <div class="relative z-10 aspect-square w-full object-cover">
+  <div class="relative z-10 w-full" style="aspect-ratio: 16/9;">
     {#if $mediaDevices.length > 0}
       <div class="absolute bottom-0 right-0 z-10">
         <MediaListSwitcher />
       </div>
     {/if}
     <video
-      class="pointer-events-none aspect-square w-full object-cover"
+      class="pointer-events-none w-full h-full object-cover"
       bind:this={videoEl}
       on:loadeddata={() => {
         videoIsReady = true;
@@ -95,10 +113,10 @@
       muted
       loop
     ></video>
-    <canvas bind:this={canvasEl} class="absolute left-0 top-0 aspect-square w-full object-cover"
+    <canvas bind:this={canvasEl} class="absolute left-0 top-0 w-full h-full object-cover"
     ></canvas>
   </div>
-  <div class="absolute left-0 top-0 flex aspect-square w-full items-center justify-center">
+  <div class="absolute left-0 top-0 flex w-full h-full items-center justify-center">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 448" class="w-40 p-5 opacity-20">
       <path
         fill="currentColor"

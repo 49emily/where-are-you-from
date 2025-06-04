@@ -16,6 +16,7 @@ import torch
 from config import Args
 from pydantic import BaseModel, Field
 from PIL import Image
+from PIL import ImageOps
 import math
 
 base_model = "stabilityai/sd-turbo"
@@ -63,7 +64,7 @@ class Pipeline:
         #     id="negative_prompt",
         # )
         width: int = Field(
-            512, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
+            896, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
         )
         height: int = Field(
             512, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
@@ -76,7 +77,7 @@ class Pipeline:
             use_tiny_vae=args.taesd,
             device=device,
             dtype=torch_dtype,
-            t_index_list=[35, 45],
+            t_index_list=[15, 20],
             frame_buffer_size=1,
             width=params.width,
             height=params.height,
@@ -103,6 +104,10 @@ class Pipeline:
         )
 
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
+        # Invert the input image colors
+        # inverted_image = ImageOps.invert(params.image.convert('RGB'))
+        
+        # image_tensor = self.stream.preprocess_image(inverted_image)
         image_tensor = self.stream.preprocess_image(params.image)
         output_image = self.stream(image=image_tensor, prompt=params.prompt)
 
