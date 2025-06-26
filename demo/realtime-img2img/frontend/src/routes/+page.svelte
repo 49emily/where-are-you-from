@@ -162,23 +162,16 @@
 
   .chat-overlay-centered :global(.chat-view) {
     @apply pointer-events-auto;
-    max-width: 600px;
-    width: 90%;
   }
 
   .video-input-overlay {
-    @apply absolute top-4 left-4 z-10 rounded-lg overflow-hidden shadow-lg;
+    @apply absolute top-4 left-4 z-30 rounded-lg overflow-hidden shadow-lg;
     width: 240px;
     height: 135px; /* 16:9 aspect ratio */
   }
 
   /* Mobile responsive adjustments */
   @media (max-width: 768px) {
-    .chat-overlay-centered :global(.chat-view) {
-      max-width: 90%;
-      width: 95%;
-    }
-    
     .video-input-overlay {
       @apply top-2 left-2;
       width: 160px;

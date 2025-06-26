@@ -59,7 +59,7 @@ async def enhance_prompt_with_gpt4o(user_prompt: str) -> str:
         print("Warning: No OpenAI API key found, using original prompt")
         return user_prompt
     
-    system_prompt = """Given this topic, come up with the best SDXL prompt. Make sure to include these exact words in the prompt: watercolor, abstract, digital art.
+    system_prompt = """Given this topic, come up with the best SDXL prompt. THIS IS VERY IMPORTANT: Make sure to include specific details from the topic. Include these exact words in the prompt: watercolor, abstract, digital art.
 
 Return ONLY the enhanced prompt, nothing else. Make it concise and optimized for SDXL image generation. Do not mention people in the prompt."""
     
